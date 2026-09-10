@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HOMEFINISH 시공사례</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--navy:#0f172a;--blue:#2563eb;--chip:#eef2ff}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;background:var(--bg);color:var(--text)}
+.top{position:sticky;top:0;z-index:20;background:rgba(15,23,42,.96);color:#fff;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}
+.topin{max-width:1080px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}.brand b{font-size:18px;letter-spacing:.2px}.brand span{display:block;font-size:10px;color:#94a3b8;margin-top:2px}.share{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;border-radius:12px;padding:9px 12px;font-weight:700}
+.hero{max-width:1080px;margin:auto;padding:34px 16px 18px}.eyebrow{font-size:11px;font-weight:800;letter-spacing:.14em;color:#64748b}.hero h1{font-size:34px;line-height:1.1;margin:8px 0 10px}.hero p{margin:0;color:var(--muted);line-height:1.7;font-size:14px}
+.filters{max-width:1080px;margin:auto;padding:0 16px 16px;display:flex;gap:8px;overflow:auto;scrollbar-width:none}.filters::-webkit-scrollbar{display:none}.filter{white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 13px;font-size:13px;font-weight:750}.filter.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.grid{max-width:1080px;margin:auto;padding:0 16px 70px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 12px 35px rgba(15,23,42,.06)}.cover{aspect-ratio:16/10;background:#e9eef5;display:grid;place-items:center;color:#94a3b8}.cover img{width:100%;height:100%;object-fit:cover}.body{padding:17px}.body h2{font-size:19px;margin:0 0 7px}.meta{font-size:13px;color:var(--muted);line-height:1.6}.tags{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0}.tag{background:#f1f5f9;border-radius:999px;padding:6px 9px;font-size:12px;font-weight:750}.desc{white-space:pre-wrap;color:#374151;line-height:1.75;font-size:14px;margin:10px 0}.phase-title{font-size:12px;font-weight:850;color:#64748b;margin:15px 0 7px}.photos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.photos img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:11px;background:#e9eef5}.empty{max-width:1080px;margin:0 auto 60px;padding:30px 16px;color:var(--muted);text-align:center}.error{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:14px;border-radius:14px;text-align:left;line-height:1.6}.footer{padding:24px 16px 36px;text-align:center;color:#94a3b8;font-size:12px}
+.lightbox{position:fixed;inset:0;background:rgba(2,6,23,.92);z-index:50;display:none;align-items:center;justify-content:center;padding:20px}.lightbox.open{display:flex}.lightbox img{max-width:100%;max-height:90vh;object-fit:contain;border-radius:12px}.close{position:absolute;top:16px;right:16px;border:0;background:rgba(255,255,255,.12);color:#fff;width:42px;height:42px;border-radius:50%;font-size:22px}
+@media(max-width:720px){.grid{grid-template-columns:1fr;gap:13px}.hero{padding-top:26px}.hero h1{font-size:29px}.top{padding-top:max(12px,env(safe-area-inset-top))}.photos{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<header class="top"><div class="topin"><div class="brand"><b>HOMEFINISH</b><span>PORTFOLIO</span></div><button class="share" id="shareBtn">공유</button></div></header>
+<section class="hero"><span class="eyebrow">WORK ARCHIVE</span><h1>시공사례</h1><p>공개 승인된 시공사례만 보여드립니다. 고객 개인정보·동호수·견적금액은 표시하지 않습니다.</p></section>
+<div class="filters" id="filters"></div>
+<main class="grid" id="grid"><div class="empty">시공사례를 불러오는 중...</div></main>
+<div class="footer">HOMEFINISH · 공개 포트폴리오</div>
+<div class="lightbox" id="lightbox"><button class="close" id="closeLightbox">×</button><img id="lightboxImg" alt="시공 사진"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id), esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const BUCKET='portfolio-images';
+const params=new URLSearchParams(location.search), url=params.get('u')||'', key=params.get('k')||'';
+let client=null, all=[], current='전체';
+function errorBox(msg){$('grid').innerHTML=`<div class="empty"><div class="error">${esc(msg)}</div></div>`}
+async function signed(path){if(!path)return '';const {data,error}=await client.storage.from(BUCKET).createSignedUrl(path,3600);if(error)throw error;return data?.signedUrl||''}
+async function urls(paths,limit=6){const out=[];for(const p of (paths||[]).slice(0,limit)){try{out.push(await signed(p))}catch(e){}}return out}
+function phase(label,arr){return arr.length?`<div class="phase-title">${label}</div><div class="photos">${arr.map(u=>`<img class="zoom" src="${esc(u)}" alt="${label}" loading="lazy">`).join('')}</div>`:''}
+async function render(filter='전체'){
+ current=filter;
+ const services=[...new Set(all.flatMap(x=>x.service_types||[]))];
+ $('filters').innerHTML=['전체',...services].map(x=>`<button class="filter ${x===filter?'active':''}" data-filter="${esc(x)}">${esc(x)}</button>`).join('');
+ document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>render(b.dataset.filter));
+ const rows=filter==='전체'?all:all.filter(x=>(x.service_types||[]).includes(filter));
+ if(!rows.length){$('grid').innerHTML='<div class="empty">현재 공개된 시공사례가 없습니다.</div>';return}
+ $('grid').innerHTML='<div class="empty">사진을 불러오는 중...</div>';
+ const cards=[];
+ for(const p of rows){
+   const after=await urls(p.after_paths,6), process=await urls(p.process_paths,6), before=await urls(p.before_paths,6);
+   const cover=after[0]||process[0]||before[0]||'';
+   cards.push(`<article class="card"><div class="cover">${cover?`<img class="zoom" src="${esc(cover)}" alt="${esc(p.title)}" loading="lazy">`:'사진 준비 중'}</div><div class="body"><h2>${esc(p.title)}</h2><div class="meta">${p.show_apartment&&p.apartment_name?esc(p.apartment_name)+' · ':''}${esc(p.area||'')}</div><div class="tags">${(p.service_types||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div>${p.description?`<div class="desc">${esc(p.description)}</div>`:''}${phase('시공 전',before)}${phase('시공 중',process)}${phase('시공 후',after)}</div></article>`)
+ }
+ $('grid').innerHTML=cards.join('');
+ document.querySelectorAll('.zoom').forEach(img=>img.onclick=()=>{$('lightboxImg').src=img.src;$('lightbox').classList.add('open')});
+}
+async function init(){
+ if(!url||!key){return errorBox('공개 링크 설정값이 없습니다. 관리자 화면의 “공개 링크 복사” 버튼으로 만든 링크를 이용해주세요.')}
+ try{
+   if(!window.supabase?.createClient) throw new Error('인터넷 연결을 확인해주세요.');
+   client=window.supabase.createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+   const {data,error}=await client.from('portfolios').select('id,title,apartment_name,show_apartment,area,service_types,description,before_paths,process_paths,after_paths,created_at').eq('is_public',true).order('created_at',{ascending:false});
+   if(error)throw error; all=data||[]; await render('전체');
+ }catch(e){errorBox('시공사례를 불러오지 못했습니다. '+e.message)}
+}
+$('shareBtn').onclick=async()=>{try{if(navigator.share)await navigator.share({title:'HOMEFINISH 시공사례',text:'시공사례를 확인해보세요.',url:location.href});else{await navigator.clipboard.writeText(location.href);alert('링크를 복사했습니다.')}}catch(e){}};
+$('closeLightbox').onclick=()=>$('lightbox').classList.remove('open');$('lightbox').onclick=e=>{if(e.target===$('lightbox'))$('lightbox').classList.remove('open')};
+init();
+})();
+</script>
+</body>
+</html>
